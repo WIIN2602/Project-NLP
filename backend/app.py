@@ -1,12 +1,8 @@
 from flask import Flask, request, jsonify
 import pymysql
-from pythainlp.corpus import thai_stopwords
+import pythainlp.tokenize
 from wordcloud import WordCloud
-import matplotlib.pyplot as plt
-import io
-
-# ใช้ PyThaiNLP สำหรับ Stopwords ภาษาไทย
-stop_words = set(thai_stopwords())
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -14,34 +10,16 @@ app = Flask(__name__)
 
 
 def connect_db():
-    return pymysql.connect(host="localhost", port=3306, user="root", password="", database="nlp_project", charset="utf8mb4")
+    return pymysql.connect(
+        host="localhost",
+        port=3306,
+        user="root",
+        password="",
+        database="nlp_project",
+        charset="utf8mb4"
+    )
 
-# API ดึงข่าวทั้งหมดจากฐานข้อมูล
-
-
-@app.route('/get_news', methods=['GET'])
-def get_news():
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, title, type, tag, date, content, link FROM news")
-    news = cursor.fetchall()
-    conn.close()
-
-    news_list = []
-    for row in news:
-        news_list.append({
-            "id": row[0],
-            "title": row[1],
-            "type": row[2],
-            "tag": row[3],
-            "date": row[4].strftime('%Y-%m-%d %H:%M:%S'),
-            "content": row[5],
-            "link": row[6]
-        })
-    return jsonify(news_list)
-
-# API ประมวลผลข่าวและสร้าง Word Cloud
+# API สำหรับสร้าง Word Cloud และบันทึกลง MySQL
 
 
 @app.route('/process_news', methods=['POST'])
@@ -59,30 +37,36 @@ def process_news():
     if not news_id or not content:
         return jsonify({"error": "Missing 'id' or 'content'"}), 400
 
-    # คัดเลือกคำสำคัญ
-    words = content.split()
-    keywords = [w for w in words if w not in stop_words][:5]
-    keywords_str = ", ".join(keywords)
+    # Tokenize ข้อความภาษาไทย
+    font_path = "fonts/Mitr-Regular.ttf"
+    reg = r"[ก-๙a-zA-Z']+"
 
-    # สร้าง Word Cloud
-    font_path = "fonts/THSarabunNew.ttf"  # ต้องมีฟอนต์อยู่ที่นี่
-    wordcloud = WordCloud(font_path=font_path,
-                          background_color="white").generate(content)
+    content_tokens = pythainlp.tokenize.word_tokenize(content)
+    content_tokens_text = " ".join(content_tokens)
+
+    # Generate Word Cloud
+    wordcloud = WordCloud(
+        font_path=font_path,
+        background_color="white",
+        max_words=2000,
+        height=800,
+        width=1600,
+        regexp=reg
+    ).generate(content_tokens_text)
 
     # แปลงภาพเป็น BLOB
-    img_io = io.BytesIO()
+    img_io = BytesIO()
     wordcloud.to_image().save(img_io, format="PNG")
     img_blob = img_io.getvalue()
 
     # อัปเดตข้อมูลลง MySQL
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE news SET tag=%s, image=%s WHERE id=%s",
-                   (keywords_str, img_blob, news_id))
+    cursor.execute("UPDATE news SET image=%s WHERE id=%s", (img_blob, news_id))
     conn.commit()
     conn.close()
 
-    return jsonify({"message": "Processed successfully!", "id": news_id, "keywords": keywords_str})
+    return jsonify({"message": "Processed successfully!", "id": news_id})
 
 
 if __name__ == '__main__':

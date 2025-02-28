@@ -2,7 +2,7 @@
 $servername = "localhost";
 $username = "root";
 $password = "";
-$dbname = "news_db";
+$dbname = "nlp_project";
 
 $conn = new mysqli($servername, $username, $password, $dbname);
 $conn->set_charset("utf8");
