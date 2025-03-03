@@ -19,18 +19,21 @@ $news_types = array_unique(array_column($news_list, 'type'));
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
-            $("#searchInput, #filterType").on("keyup change", function() {
-                var value = $("#searchInput").val().toLowerCase();
-                var filterType = $("#filterType").val().toLowerCase();
+            function filterNews() {
+                var searchText = $("#searchInput").val().toLowerCase();
+                var selectedType = $("#filterType").val().toLowerCase();
                 var hasResults = false;
-                
+
                 $(".news-card").each(function() {
-                    var title = $(this).find(".news-title").text().toLowerCase();
-                    var content = $(this).find(".news-content").text().toLowerCase();
-                    var tag = $(this).find(".news-tag").text().toLowerCase();
-                    var type = $(this).attr("data-type").toLowerCase();
-                    
-                    if ((title.includes(value) || content.includes(value) || tag.includes(value)) && (filterType === "all" || type === filterType)) {
+                    var newsType = $(this).attr("data-type").toLowerCase();
+                    var newsTitle = $(this).find(".news-title").text().toLowerCase();
+                    var newsContent = $(this).find(".news-content").text().toLowerCase();
+                    var newsTags = $(this).find(".news-tag").text().toLowerCase();
+
+                    var matchesType = (selectedType === "all" || newsType === selectedType);
+                    var matchesSearch = (searchText === "" || newsTitle.includes(searchText) || newsContent.includes(searchText) || newsTags.includes(searchText));
+
+                    if (matchesType && matchesSearch) {
                         $(this).show();
                         hasResults = true;
                     } else {
@@ -38,88 +41,256 @@ $news_types = array_unique(array_column($news_list, 'type'));
                     }
                 });
 
-                if (!hasResults) {
-                    $("#noResults").show();
-                } else {
-                    $("#noResults").hide();
+                $("#noResults").toggle(!hasResults);
+            }
+
+            $("#filterType, #searchInput").on("change keyup", filterNews);
+        });
+
+        function processNews(newsId) {
+            $.ajax({
+                url: "process_news.php",
+                type: "POST",
+                data: JSON.stringify({ id: newsId }),
+                contentType: "application/json",
+                success: function() {
+                    $("#news-img-" + newsId).attr("src", "get_image.php?id=" + newsId + "&t=" + new Date().getTime());
+                },
+                error: function(xhr) {
+                    alert("Error processing news: " + xhr.responseText);
                 }
             });
-        });
+        }
+
+        function extractKeywords(newsId) {
+            $.ajax({
+                url: "extract_keywords.php",
+                type: "POST",
+                data: JSON.stringify({ id: newsId }),
+                contentType: "application/json",
+                success: function() {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert("Error extracting keywords: " + xhr.responseText);
+                }
+            });
+        }
+
+        function summarizeNews(newsId) {
+            $.ajax({
+                url: "summarize_news.php",
+                type: "POST",
+                data: JSON.stringify({ id: newsId }),
+                contentType: "application/json",
+                success: function() {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert("Error summarizing news: " + xhr.responseText);
+                }
+            });
+        }
     </script>
+
     <style>
         body {
-            position: relative;
-            width: 1440px;
-            height: 1024px;
-            overflow-x: scroll;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
             background: linear-gradient(180deg, #BCF4DE 51%, #FFB7C3 99.99%);
         }
+
         h1 {
             text-align: center;
             font-size: 32px;
             margin-top: 20px;
             color: #000;
         }
+
+        /* 🔹 Filter Container & Inputs Styled Same as Buttons */
         .filter-container {
-            display: inline-block;
-            margin: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
         }
-        #filterType {
-            width: 150px;
-            height: 30px;
+
+        select, input {
+            padding: 10px;
+            font-size: 16px;
             border-radius: 10px;
-            padding: 5px;
-            font-size: 16px;
+            border: 2px solid #7A0177;
+            background: #FCC5C0;
+            color: #000;
+            font-weight: bold;
+            text-align: center;
         }
+
         #searchInput {
-            display: inline-block;
-            width: 400px;
-            height: 30px;
-            background: #FFB7C3;
-            border-radius: 20px;
-            padding: 5px;
-            font-size: 16px;
+            width: 300px;
         }
+
         .news-container {
-            position: absolute;
-            width: 1220px;
-            top: 150px;
-            left: 110px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 90%;
+            max-width: 1220px;
         }
+
         .news-card {
             background: linear-gradient(180deg, #FCC5C0 0%, #7A0177 100%);
             border-radius: 20px;
             padding: 20px;
-            margin-bottom: 15px;
+            margin: 15px 0;
             width: 100%;
+            max-width: 800px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             transition: transform 0.3s ease-in-out;
         }
+
         .news-card:hover {
             transform: scale(1.05);
         }
+        
+        /* 🔹 "อ่านเพิ่มเติม" Link Styling */
+        .news-card p a {
+            display: inline-block;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: #7A0177;
+            padding: 10px 15px;
+            border-radius: 10px;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 🔹 Hover Effect */
+        .news-card p a:hover {
+            background: #FCC5C0;
+            color: black;
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
         .news-title {
-            font-family: 'Mitr', sans-serif;
             font-size: 24px;
             color: #000;
+            text-align: center;
         }
+
         .news-content, .news-tag {
             font-size: 18px;
             color: #000;
+            text-align: left;
         }
+
+        .wordcloud-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+
         .wordcloud-container img {
             width: 100%;
+            max-width: 400px;
             border-radius: 10px;
         }
+
+        .summary-container {
+            text-align: left;
+            margin-top: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        /* 🔹 Buttons inside Cards Styled Same as Filter Inputs */
+        .news-card button {
+            display: inline-block;
+            padding: 10px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 2px solid #7A0177;
+            border-radius: 10px;
+            background: #FCC5C0;
+            color: #000;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        .news-card button:hover {
+            background: #7A0177;
+            color: white;
+            transform: scale(1.05);
+        }
+
         .no-results {
             text-align: center;
             font-size: 20px;
             color: red;
+            display: none;
         }
+
+        .tag-container {
+            text-align: left;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: left;
+            gap: 8px;
+        }
+        
+        /* 🔹 Filter Dropdown Styling */
+        #filterType {
+            padding: 10px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 10px;
+            border: 2px solid #7A0177;
+            background: #FCC5C0;
+            color: black;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease-in-out;
+        }
+
+        /* 🔹 Hover & Focus Effect */
+        #filterType:hover, #filterType:focus {
+            background: #7A0177;
+            color: white;
+            border-color: #FCC5C0;
+            outline: none;
+        }
+
+        /* 🔹 Dropdown Options Styling */
+        #filterType option {
+            background: white;
+            color: black;
+            font-weight: bold;
+        }
+
+        /* 🔹 Option Hover Effect (for some browsers) */
+        #filterType option:hover {
+            background: #FCC5C0;
+        }
+
     </style>
 </head>
 <body>
     <h1>ข่าวทั้งหมด</h1>
+
     <div class="filter-container">
         <label for="filterType">ประเภท:</label>
         <select id="filterType">
@@ -128,27 +299,40 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
             <?php endforeach; ?>
         </select>
+        <input type="text" id="searchInput" placeholder="ค้นหาข่าว...">
     </div>
-    <input type="text" id="searchInput" placeholder="ค้นหาข่าว...">
+
     <div class="news-container">
-        <?php if (empty($news_list)) : ?>
-            <div id="noResults" class="news-card no-results">
-                <h3>ไม่มีข่าวที่ตรงกับการค้นหา</h3>
-                <p>โปรดลองป้อนคำใหม่ที่เกี่ยวข้องกับหัวข้อข่าว เนื้อหา หรือแท็ก</p>
-            </div>
-        <?php else : ?>
-            <?php foreach ($news_list as $news): ?>
-                <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>" id="news-<?php echo $news['id']; ?>">
-                    <h3 class="news-title"> <?php echo $news['title']; ?> </h3>
-                    <p class="news-content">ประเภท: <?php echo $news['type']; ?></p>
-                    <p><strong>คำสำคัญ:</strong> <span class="news-tag"> <?php echo $news['tag']; ?> </span></p>
-                    <p><a href="<?php echo $news['link']; ?>">อ่านเพิ่มเติม</a></p>
-                    <div class="wordcloud-container">
-                        <img src="get_image.php?id=<?php echo $news['id']; ?>" alt="Word Cloud">
-                    </div>
+        <div id="noResults" class="no-results">
+            <h3>ไม่มีข่าวที่ตรงกับการค้นหา</h3>
+            <p>โปรดลองป้อนคำใหม่ที่เกี่ยวข้องกับหัวข้อข่าว เนื้อหา หรือแท็ก</p>
+        </div>
+
+        <?php foreach ($news_list as $news): ?>
+            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>" id="news-<?php echo $news['id']; ?>">
+                <h3 class="news-title"><?php echo $news['title']; ?></h3>
+                <p class="news-content">ประเภท: <?php echo $news['type']; ?></p>
+                <p><a href="<?php echo $news['link']; ?>">อ่านเพิ่มเติม</a></p>
+
+                <button onclick="processNews(<?php echo $news['id']; ?>)">Generate Word Cloud</button>
+                <button onclick="extractKeywords(<?php echo $news['id']; ?>)">Extract Keywords</button>
+                <button onclick="summarizeNews(<?php echo $news['id']; ?>)">Summarize News</button>
+
+                <div class="summary-container">
+                    <strong>ไฮไลท์ในข่าว:</strong>
+                    <p><?php echo !empty($news['summary']) ? htmlspecialchars($news['summary']) : "<span style='color: gray;'>ยังไม่มีการสรุป</span>"; ?></p>
                 </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
+
+                <div class="tag-container">
+                    <strong>คำปรากฎในข่าวเยอะที่สุด: </strong>
+                    <span class="news-tag"><?php echo htmlspecialchars($news['tag'] ?? 'ยังไม่มีการวิเคราะห์'); ?></span>
+                </div>
+
+                <div class="wordcloud-container">
+                    <img id="news-img-<?php echo $news['id']; ?>" src="get_image.php?id=<?php echo $news['id']; ?>" alt="Word Cloud">
+                </div>
+            </div>
+        <?php endforeach; ?>
     </div>
 </body>
 </html>
