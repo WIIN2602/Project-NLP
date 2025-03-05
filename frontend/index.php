@@ -7,8 +7,13 @@ if (!$news_list) {
     $news_list = [];
 }
 
-// Get unique types from the news list
+// Get unique types, publishers, and years
 $news_types = array_unique(array_column($news_list, 'type'));
+$publishers = array_unique(array_column($news_list, 'publisher'));
+$years = array_unique(array_map(function ($news) {
+    return !empty($news['date']) ? date("Y", strtotime($news['date'])) : "No data";
+}, $news_list));
+sort($years); // Sort years in ascending order
 ?>
 
 <!DOCTYPE html>
@@ -22,18 +27,24 @@ $news_types = array_unique(array_column($news_list, 'type'));
             function filterNews() {
                 var searchText = $("#searchInput").val().toLowerCase();
                 var selectedType = $("#filterType").val().toLowerCase();
+                var selectedPublisher = $("#filterPublisher").val().toLowerCase();
+                var selectedYear = $("#filterYear").val().toLowerCase();
                 var hasResults = false;
 
                 $(".news-card").each(function() {
                     var newsType = $(this).attr("data-type").toLowerCase();
+                    var newsPublisher = $(this).attr("data-publisher").toLowerCase();
+                    var newsYear = $(this).attr("data-year").toLowerCase();
                     var newsTitle = $(this).find(".news-title").text().toLowerCase();
                     var newsContent = $(this).find(".news-content").text().toLowerCase();
                     var newsTags = $(this).find(".news-tag").text().toLowerCase();
 
                     var matchesType = (selectedType === "all" || newsType === selectedType);
+                    var matchesPublisher = (selectedPublisher === "all" || newsPublisher === selectedPublisher);
+                    var matchesYear = (selectedYear === "all" || newsYear === selectedYear);
                     var matchesSearch = (searchText === "" || newsTitle.includes(searchText) || newsContent.includes(searchText) || newsTags.includes(searchText));
 
-                    if (matchesType && matchesSearch) {
+                    if (matchesType && matchesPublisher && matchesYear && matchesSearch) {
                         $(this).show();
                         hasResults = true;
                     } else {
@@ -44,7 +55,7 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 $("#noResults").toggle(!hasResults);
             }
 
-            $("#filterType, #searchInput").on("change keyup", filterNews);
+            $("#filterType, #filterPublisher, #filterYear, #searchInput").on("change keyup", filterNews);
         });
 
         function processNews(newsId) {
@@ -54,7 +65,7 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
                 success: function() {
-                    $("#news-img-" + newsId).attr("src", "get_image.php?id=" + newsId + "&t=" + new Date().getTime());
+                    location.reload();  // Reload the page to show the updated word cloud
                 },
                 error: function(xhr) {
                     alert("Error processing news: " + xhr.responseText);
@@ -69,7 +80,7 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
                 success: function() {
-                    location.reload();
+                    location.reload();  // Reload to show updated keywords
                 },
                 error: function(xhr) {
                     alert("Error extracting keywords: " + xhr.responseText);
@@ -84,7 +95,7 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
                 success: function() {
-                    location.reload();
+                    location.reload();  // Reload to show updated summary
                 },
                 error: function(xhr) {
                     alert("Error summarizing news: " + xhr.responseText);
@@ -299,6 +310,23 @@ $news_types = array_unique(array_column($news_list, 'type'));
                 <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
             <?php endforeach; ?>
         </select>
+
+        <label for="filterPublisher">ผู้เผยแพร่:</label>
+        <select id="filterPublisher">
+            <option value="all">ทั้งหมด</option>
+            <?php foreach ($publishers as $publisher): ?>
+                <option value="<?php echo htmlspecialchars($publisher); ?>"><?php echo htmlspecialchars($publisher); ?></option>
+            <?php endforeach; ?>
+        </select>
+
+        <label for="filterYear">ปี:</label>
+        <select id="filterYear">
+            <option value="all">ทั้งหมด</option>
+            <?php foreach ($years as $year): ?>
+                <option value="<?php echo htmlspecialchars($year); ?>"><?php echo htmlspecialchars($year); ?></option>
+            <?php endforeach; ?>
+        </select>
+
         <input type="text" id="searchInput" placeholder="ค้นหาข่าว...">
     </div>
 
@@ -309,10 +337,15 @@ $news_types = array_unique(array_column($news_list, 'type'));
         </div>
 
         <?php foreach ($news_list as $news): ?>
-            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>" id="news-<?php echo $news['id']; ?>">
+
+
+            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>" data-publisher="<?php echo htmlspecialchars($news['publisher'] ?? 'No data'); ?>" data-year="<?php echo !empty($news['date']) ? date("Y", strtotime($news['date'])) : 'No data'; ?>" id="news-<?php echo $news['id']; ?>">
                 <h3 class="news-title"><?php echo $news['title']; ?></h3>
-                <p class="news-content">ประเภท: <?php echo $news['type']; ?></p>
+                <p class="news-content">
+                    ประเภท: <?php echo $news['type']; ?> | ผู้เผยแพร่: <?php echo $news['publisher'] ?? 'No data'; ?> | วันที่: <?php echo !empty($news['date']) ? $news['date'] : 'No data'; ?></span>
+                </p>
                 <p><a href="<?php echo $news['link']; ?>">อ่านเพิ่มเติม</a></p>
+
 
                 <button onclick="processNews(<?php echo $news['id']; ?>)">Generate Word Cloud</button>
                 <button onclick="extractKeywords(<?php echo $news['id']; ?>)">Extract Keywords</button>
