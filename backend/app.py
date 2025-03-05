@@ -44,6 +44,7 @@ def process_news():
         return jsonify({"error": "Invalid JSON data"}), 400
 
     news_id = data.get("id")
+    title = data.get("title")
     content = data.get("content")
 
     if not news_id or not content:
@@ -95,7 +96,6 @@ def process_news():
     cursor.execute("UPDATE news SET image=%s WHERE id=%s", (img_blob, news_id))
     conn.commit()
     conn.close()
-
     return jsonify({"message": "Processed successfully!", "id": news_id})
 
 
@@ -161,7 +161,6 @@ def extract_keywords():
                    (keywords_str, news_id))
     conn.commit()
     conn.close()
-
     return jsonify({"message": "Keywords extracted successfully!", "id": news_id, "keywords": top_keywords})
 
 
@@ -175,6 +174,7 @@ def summarize_news():
         return jsonify({"error": "Invalid JSON data"}), 400
 
     news_id = data.get("id")
+    title = data.get("title")
     content = data.get("content")
 
     if not news_id or not content:
@@ -191,7 +191,6 @@ def summarize_news():
                    (summary_text, news_id))
     conn.commit()
     conn.close()
-
     return jsonify({"message": "Summary generated successfully!", "id": news_id, "summary": summary_text})
 
 

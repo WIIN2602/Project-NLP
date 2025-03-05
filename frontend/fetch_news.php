@@ -14,7 +14,7 @@ if ($conn->connect_error) {
 }
 
 // คิวรีข้อมูลข่าว
-$sql = "SELECT id, title, type, tag, date, content, link, summary FROM news";
+$sql = "SELECT id, title, publisher, type, tag, date, content, link, summary FROM news";
 $result = $conn->query($sql);
 
 $news = [];
