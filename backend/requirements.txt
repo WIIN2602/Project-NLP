@@ -8,3 +8,4 @@ sqlmodel == 0.0.22
 fastapi == 0.115.8
 mysql-connector-python == 9.2.0
 python-crfsuite == 0.9.11
+gpt4all == 2.8.2
