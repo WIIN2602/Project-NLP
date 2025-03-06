@@ -113,17 +113,22 @@ CREATE TABLE news (
 
 ### 4. **Load Data into SQLite**
 ```bash
-python backend/push_data2mysql/csv2sql.py
+cd backend/push_data2mysql/
 ```
-
+```bash
+python csv2sql.py
+```
 ### 5. **Migrate Data to MySQL**
 ```bash
-python backend/push_data2mysql/insert.py
+python insert.py
 ```
 
 ### 6. **Start the Flask API Server**
 ```bash
-python backend/app.py
+cd ..
+```
+```bash
+python app.py
 ```
 
 ### 7. **Run the Frontend**
