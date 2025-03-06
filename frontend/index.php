@@ -1,5 +1,5 @@
 <?php
-$data = file_get_contents("http://localhost/NLP_PROJECT/frontend/fetch_news.php");
+$data = file_get_contents("http://localhost/Project-NLP/frontend/fetch_news.php");
 $news_list = json_decode($data, true);
 
 if (!$news_list) {
@@ -18,20 +18,23 @@ sort($years); // Sort years in ascending order
 
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
     <meta charset="UTF-8">
     <title>News Summary</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
-        $(document).ready(function() {
+        $(document).ready(function () {
             function filterNews() {
-                var searchText = $("#searchInput").val().toLowerCase();
+                var searchText = $("#searchInput").val().toLowerCase().trim();
                 var selectedType = $("#filterType").val().toLowerCase();
                 var selectedPublisher = $("#filterPublisher").val().toLowerCase();
                 var selectedYear = $("#filterYear").val().toLowerCase();
                 var hasResults = false;
 
-                $(".news-card").each(function() {
+                $(".news-card").each(function () {
                     var newsType = $(this).attr("data-type").toLowerCase();
                     var newsPublisher = $(this).attr("data-publisher").toLowerCase();
                     var newsYear = $(this).attr("data-year").toLowerCase();
@@ -43,9 +46,11 @@ sort($years); // Sort years in ascending order
                     var matchesPublisher = (selectedPublisher === "all" || newsPublisher === selectedPublisher);
                     var matchesYear = (selectedYear === "all" || newsYear === selectedYear);
                     var matchesSearch = (searchText === "" || newsTitle.includes(searchText) || newsContent.includes(searchText) || newsTags.includes(searchText));
+                    // แสดงการเปรียบเทียบว่าอะไรตรงกับเงื่อนไข
 
                     if (matchesType && matchesPublisher && matchesYear && matchesSearch) {
                         $(this).show();
+                        console.log("1:");
                         hasResults = true;
                     } else {
                         $(this).hide();
@@ -57,6 +62,14 @@ sort($years); // Sort years in ascending order
 
             $("#filterType, #filterPublisher, #filterYear, #searchInput").on("change keyup", filterNews);
         });
+        function copySummary(button) {
+            var summaryText = button.nextElementSibling.innerText; // ดึงข้อความข่าว
+            navigator.clipboard.writeText(summaryText).then(function () {
+                alert("คัดลอกแล้ว!"); // แจ้งเตือนว่าคัดลอกสำเร็จ
+            }).catch(function (err) {
+                console.error("Error copying text: ", err);
+            });
+        }
 
         function processNews(newsId) {
             $.ajax({
@@ -64,10 +77,10 @@ sort($years); // Sort years in ascending order
                 type: "POST",
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function() {
+                success: function () {
                     location.reload();  // Reload the page to show the updated word cloud
                 },
-                error: function(xhr) {
+                error: function (xhr) {
                     alert("Error processing news: " + xhr.responseText);
                 }
             });
@@ -79,10 +92,10 @@ sort($years); // Sort years in ascending order
                 type: "POST",
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function() {
+                success: function () {
                     location.reload();  // Reload to show updated keywords
                 },
-                error: function(xhr) {
+                error: function (xhr) {
                     alert("Error extracting keywords: " + xhr.responseText);
                 }
             });
@@ -94,10 +107,10 @@ sort($years); // Sort years in ascending order
                 type: "POST",
                 data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function() {
+                success: function () {
                     location.reload();  // Reload to show updated summary
                 },
-                error: function(xhr) {
+                error: function (xhr) {
                     alert("Error summarizing news: " + xhr.responseText);
                 }
             });
@@ -112,17 +125,18 @@ sort($years); // Sort years in ascending order
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background: linear-gradient(180deg, #BCF4DE 51%, #FFB7C3 99.99%);
+            background-color: white;
+            font-family: 'Bai Jamjuree', sans-serif;
+            color: #333333;
         }
 
         h1 {
             text-align: center;
-            font-size: 32px;
+            font-size: 36px;
             margin-top: 20px;
-            color: #000;
+            color: #00BFFF;
         }
 
-        /* 🔹 Filter Container & Inputs Styled Same as Buttons */
         .filter-container {
             display: flex;
             justify-content: center;
@@ -130,12 +144,13 @@ sort($years); // Sort years in ascending order
             margin-bottom: 20px;
         }
 
-        select, input {
+        select,
+        input {
             padding: 10px;
             font-size: 16px;
             border-radius: 10px;
-            border: 2px solid #7A0177;
-            background: #FCC5C0;
+            border: 2px solid #00BFFF;
+            background: #E0FFFF;
             color: #000;
             font-weight: bold;
             text-align: center;
@@ -154,9 +169,9 @@ sort($years); // Sort years in ascending order
         }
 
         .news-card {
-            background: linear-gradient(180deg, #FCC5C0 0%, #7A0177 100%);
+            background: linear-gradient(180deg, #E0FFFF 0%, #00BFFF 100%);
             border-radius: 20px;
-            padding: 20px;
+            padding: 24px 16px;
             margin: 15px 0;
             width: 100%;
             max-width: 800px;
@@ -167,36 +182,37 @@ sort($years); // Sort years in ascending order
         .news-card:hover {
             transform: scale(1.05);
         }
-        
-        /* 🔹 "อ่านเพิ่มเติม" Link Styling */
+
         .news-card p a {
             display: inline-block;
             text-decoration: none;
             font-size: 16px;
             font-weight: bold;
             color: white;
-            background: #7A0177;
+            background: #00BFFF;
             padding: 10px 15px;
             border-radius: 10px;
             transition: all 0.3s ease-in-out;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        /* 🔹 Hover Effect */
         .news-card p a:hover {
-            background: #FCC5C0;
+            background: rgba(255, 255, 255, 0.8);
             color: black;
             transform: scale(1.05);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
+
         .news-title {
-            font-size: 24px;
+            margin: 0px;
+            font-size: 28px;
             color: #000;
             text-align: center;
         }
 
-        .news-content, .news-tag {
+        .news-content,
+        .news-tag {
             font-size: 18px;
             color: #000;
             text-align: left;
@@ -205,7 +221,7 @@ sort($years); // Sort years in ascending order
         .wordcloud-container {
             display: flex;
             justify-content: center;
-            margin-top: 10px;
+            margin-top: 20px;
         }
 
         .wordcloud-container img {
@@ -215,6 +231,7 @@ sort($years); // Sort years in ascending order
         }
 
         .summary-container {
+            position: relative;
             text-align: left;
             margin-top: 10px;
             background: rgba(255, 255, 255, 0.8);
@@ -222,15 +239,38 @@ sort($years); // Sort years in ascending order
             border-radius: 10px;
         }
 
-        /* 🔹 Buttons inside Cards Styled Same as Filter Inputs */
-        .news-card button {
+        .copy-btn {
+            position: absolute;
+            justify-content: center;
+            align-items: center;
+            top: 6px;
+            right: 8px;
+            background: transparent;
+            font-size: 16px;
+            font-weight: bold;
+            border: 2px solid #00BFFF;
+            border-radius: 10px;
+            cursor: pointer;
+            color: #333;
+            font-size: 12px;
+            padding: 6px;
+
+        }
+
+        .copy-btn:hover {
+            color: #007acc;
+            background: #00BFFF;
+            transform: scale(1.05);
+        }
+
+        .news-card .btn {
             display: inline-block;
             padding: 10px 15px;
             font-size: 16px;
             font-weight: bold;
-            border: 2px solid #7A0177;
+            border: 2px solid #00BFFF;
             border-radius: 10px;
-            background: #FCC5C0;
+            background: #E0FFFF;
             color: #000;
             cursor: pointer;
             margin: 5px;
@@ -238,7 +278,7 @@ sort($years); // Sort years in ascending order
         }
 
         .news-card button:hover {
-            background: #7A0177;
+            background: #00BFFF;
             color: white;
             transform: scale(1.05);
         }
@@ -262,45 +302,50 @@ sort($years); // Sort years in ascending order
             justify-content: left;
             gap: 8px;
         }
-        
-        /* 🔹 Filter Dropdown Styling */
+
+        /* เพิ่มอิโมจิในข่าว */
+        .news-content:before {
+            content: "📰";
+            /* ใส่อิโมจิ */
+            font-size: 18px;
+            margin-right: 5px;
+        }
+
         #filterType {
             padding: 10px 15px;
             font-size: 16px;
             font-weight: bold;
             border-radius: 10px;
-            border: 2px solid #7A0177;
-            background: #FCC5C0;
+            border: 2px solid #00BFFF;
+            background: #E0FFFF;
             color: black;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease-in-out;
         }
 
-        /* 🔹 Hover & Focus Effect */
-        #filterType:hover, #filterType:focus {
-            background: #7A0177;
+        #filterType:hover,
+        #filterType:focus {
+            background: #00BFFF;
             color: white;
-            border-color: #FCC5C0;
+            border-color: #E0FFFF;
             outline: none;
         }
 
-        /* 🔹 Dropdown Options Styling */
         #filterType option {
             background: white;
             color: black;
             font-weight: bold;
         }
 
-        /* 🔹 Option Hover Effect (for some browsers) */
         #filterType option:hover {
-            background: #FCC5C0;
+            background: #E0FFFF;
         }
-
     </style>
 </head>
+
 <body>
-    <h1>ข่าวทั้งหมด</h1>
+    <h1>📰 ข่าวทั้งหมด</h1>
 
     <div class="filter-container">
         <label for="filterType">ประเภท:</label>
@@ -315,7 +360,8 @@ sort($years); // Sort years in ascending order
         <select id="filterPublisher">
             <option value="all">ทั้งหมด</option>
             <?php foreach ($publishers as $publisher): ?>
-                <option value="<?php echo htmlspecialchars($publisher); ?>"><?php echo htmlspecialchars($publisher); ?></option>
+                <option value="<?php echo htmlspecialchars($publisher); ?>"><?php echo htmlspecialchars($publisher); ?>
+                </option>
             <?php endforeach; ?>
         </select>
 
@@ -332,28 +378,36 @@ sort($years); // Sort years in ascending order
 
     <div class="news-container">
         <div id="noResults" class="no-results">
-            <h3>ไม่มีข่าวที่ตรงกับการค้นหา</h3>
+            <h3>❌ ไม่มีข่าวที่ตรงกับการค้นหา</h3>
             <p>โปรดลองป้อนคำใหม่ที่เกี่ยวข้องกับหัวข้อข่าว เนื้อหา หรือแท็ก</p>
         </div>
 
         <?php foreach ($news_list as $news): ?>
 
 
-            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>" data-publisher="<?php echo htmlspecialchars($news['publisher'] ?? 'No data'); ?>" data-year="<?php echo !empty($news['date']) ? date("Y", strtotime($news['date'])) : 'No data'; ?>" id="news-<?php echo $news['id']; ?>">
+            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>"
+                data-publisher="<?php echo htmlspecialchars($news['publisher'] ?? 'No data'); ?>"
+                data-year="<?php echo !empty($news['date']) ? date("Y", strtotime($news['date'])) : 'No data'; ?>"
+                id="news-<?php echo $news['id']; ?>">
                 <h3 class="news-title"><?php echo $news['title']; ?></h3>
                 <p class="news-content">
-                    ประเภท: <?php echo $news['type']; ?> | ผู้เผยแพร่: <?php echo $news['publisher'] ?? 'No data'; ?> | วันที่: <?php echo !empty($news['date']) ? $news['date'] : 'No data'; ?></span>
+                    ประเภท: <?php echo $news['type']; ?> | ผู้เผยแพร่: <?php echo $news['publisher'] ?? 'No data'; ?> |
+                    วันที่: <?php echo !empty($news['date']) ? $news['date'] : 'No data'; ?></span>
                 </p>
                 <p><a href="<?php echo $news['link']; ?>">อ่านเพิ่มเติม</a></p>
 
 
-                <button onclick="processNews(<?php echo $news['id']; ?>)">Generate Word Cloud</button>
-                <button onclick="extractKeywords(<?php echo $news['id']; ?>)">Extract Keywords</button>
-                <button onclick="summarizeNews(<?php echo $news['id']; ?>)">Summarize News</button>
+                <button class="btn" onclick="processNews(<?php echo $news['id']; ?>)">Generate Word Cloud</button>
+                <button class="btn" onclick="extractKeywords(<?php echo $news['id']; ?>)">Extract Keywords</button>
+                <button class="btn" onclick="summarizeNews(<?php echo $news['id']; ?>)">Summarize News</button>
 
                 <div class="summary-container">
                     <strong>ไฮไลท์ในข่าว:</strong>
-                    <p><?php echo !empty($news['summary']) ? htmlspecialchars($news['summary']) : "<span style='color: gray;'>ยังไม่มีการสรุป</span>"; ?></p>
+                    <button class="copy-btn" onclick="copySummary(this)">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                    <p><?php echo !empty($news['summary']) ? htmlspecialchars($news['summary']) : "<span style='color: gray;'>ยังไม่มีการสรุป</span>"; ?>
+                    </p>
                 </div>
 
                 <div class="tag-container">
@@ -362,10 +416,12 @@ sort($years); // Sort years in ascending order
                 </div>
 
                 <div class="wordcloud-container">
-                    <img id="news-img-<?php echo $news['id']; ?>" src="get_image.php?id=<?php echo $news['id']; ?>" alt="Word Cloud">
+                    <img id="news-img-<?php echo $news['id']; ?>" src="get_image.php?id=<?php echo $news['id']; ?>"
+                        alt="Word Cloud">
                 </div>
             </div>
         <?php endforeach; ?>
     </div>
 </body>
+
 </html>
