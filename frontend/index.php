@@ -1,19 +1,5 @@
 <?php
-$data = file_get_contents("http://localhost/Project-NLP/frontend/fetch_news.php");
-$news_list = json_decode($data, true);
-
-if (!$news_list) {
-    echo "<p style='color: red;'>⚠ ไม่สามารถโหลดข้อมูลข่าวได้ โปรดตรวจสอบ API หรือฐานข้อมูล</p>";
-    $news_list = [];
-}
-
-// Get unique types, publishers, and years
-$news_types = array_unique(array_column($news_list, 'type'));
-$publishers = array_unique(array_column($news_list, 'publisher'));
-$years = array_unique(array_map(function ($news) {
-    return !empty($news['date']) ? date("Y", strtotime($news['date'])) : "No data";
-}, $news_list));
-sort($years); // Sort years in ascending order
+$news_list = []; // No initial data from MySQL
 ?>
 
 <!DOCTYPE html>
@@ -25,97 +11,170 @@ sort($years); // Sort years in ascending order
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
     <script>
         $(document).ready(function () {
-            function filterNews() {
-                var searchText = $("#searchInput").val().toLowerCase().trim();
-                var selectedType = $("#filterType").val().toLowerCase();
-                var selectedPublisher = $("#filterPublisher").val().toLowerCase();
-                var selectedYear = $("#filterYear").val().toLowerCase();
-                var hasResults = false;
+            // Handle Scrape Button Click
+            $("#scrapeButton").click(function () {
+                var selectedType = $("#filterType").val();
+                var selectedPublisher = $("#filterPublisher").val();
+                var selectedYear = $("#filterYear").val();
 
-                $(".news-card").each(function () {
-                    var newsType = $(this).attr("data-type").toLowerCase();
-                    var newsPublisher = $(this).attr("data-publisher").toLowerCase();
-                    var newsYear = $(this).attr("data-year").toLowerCase();
-                    var newsTitle = $(this).find(".news-title").text().toLowerCase();
-                    var newsContent = $(this).find(".news-content").text().toLowerCase();
-                    var newsTags = $(this).find(".news-tag").text().toLowerCase();
+                $("#noResults").html("<h3>⏳ กำลังดึงข้อมูลข่าว...</h3>").css("color", "blue").show();
+                
+                setTimeout(function () {
+                    $(".news-container").empty();
+                    startScraping(selectedType, selectedPublisher, selectedYear);
+                }, 5000);
+            });
 
-                    var matchesType = (selectedType === "all" || newsType === selectedType);
-                    var matchesPublisher = (selectedPublisher === "all" || newsPublisher === selectedPublisher);
-                    var matchesYear = (selectedYear === "all" || newsYear === selectedYear);
-                    var matchesSearch = (searchText === "" || newsTitle.includes(searchText) || newsContent.includes(searchText) || newsTags.includes(searchText));
-                    // แสดงการเปรียบเทียบว่าอะไรตรงกับเงื่อนไข
+            function startScraping(type, publisher, year) {
+                $.ajax({
+                    url: "http://127.0.0.1:5000/fetch_news",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify({
+                        type: type,
+                        publisher: publisher,
+                        year: year
+                    }),
+                    success: function (response) {
+                        console.log("Scraped Data:", response);
 
-                    if (matchesType && matchesPublisher && matchesYear && matchesSearch) {
-                        $(this).show();
-                        console.log("1:");
-                        hasResults = true;
-                    } else {
-                        $(this).hide();
+                        if (response.news.length > 0) {
+                            $("#noResults").html("<h3 style='color:green;'>✔️ Scraping complete</h3>").show();
+                            displayNews(response.news);
+                        } else {
+                            $("#noResults").html("<h3 style='color:red;'>❌ ไม่มีข่าวที่ตรงกับการค้นหา</h3>").show();
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        console.log("AJAX Error:", xhr, status, error);
+                        let errorMessage = xhr.responseText ? xhr.responseText : error ? error : "Unknown error";
+
+                        $("#noResults").html(
+                            "<h3 style='color:red;'>❌ ดึงข้อมูลข่าวไม่สำเร็จ</h3>" +
+                            "<p><strong>Error:</strong> " + errorMessage + "</p>"
+                        ).show();
                     }
                 });
-
-                $("#noResults").toggle(!hasResults);
             }
 
-            $("#filterType, #filterPublisher, #filterYear, #searchInput").on("change keyup", filterNews);
+            function displayNews(newsList) {
+                $(".news-container").empty();
+
+                newsList.forEach(news => {
+                    var newsCard = `
+                        <div class="news-card" data-id="${news.id}" data-type="${news.type}" data-publisher="${news.publisher}" data-year="${news.date ? new Date(news.date).getFullYear() : 'No data'}">
+                            <h3 class="news-title">${news.title}</h3>
+                            <p class="news-content" style="display:none;">${news.content}</p> <!-- Hidden Content -->
+                            <p>
+                                ประเภท: ${news.type} | ผู้เผยแพร่: ${news.publisher} | วันที่: ${news.date || 'No data'}
+                            </p>
+                            <p><a href="${news.link}" target="_blank">อ่านเพิ่มเติม</a></p>
+                            <button class="btn" onclick="processNews('${news.id}', this)">Generate Word Cloud</button>
+                            <button class="btn" onclick="extractKeywords('${news.id}', this)">Extract Keywords</button>
+                            <button class="btn" onclick="summarizeNews('${news.id}', this)">Summarize News</button>
+                            <div class="summary-container">
+                                <strong>ไฮไลท์ในข่าว:</strong>
+                                <button class="copy-btn" onclick="copySummary(this)">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                                <p id="summary-${news.id}">${news.summary || "<span style='color: gray;'>ยังไม่มีการสรุป</span>"}</p>
+                            </div>
+                            <div class="tag-container">
+                                <strong>คำปรากฎในข่าวเยอะที่สุด: </strong>
+                                <span class="news-tag" id="keywords-${news.id}">${news.tag || "ยังไม่มีการวิเคราะห์"}</span>
+                            </div>
+                            <div class="wordcloud-container">
+                                <img id="wordcloud-${news.id}" src="" alt="Word Cloud">
+                            </div>
+                        </div>
+                    `;
+                    $(".news-container").append(newsCard);
+                });
+            }
         });
-        function copySummary(button) {
-            var summaryText = button.nextElementSibling.innerText; // ดึงข้อความข่าว
-            navigator.clipboard.writeText(summaryText).then(function () {
-                alert("คัดลอกแล้ว!"); // แจ้งเตือนว่าคัดลอกสำเร็จ
-            }).catch(function (err) {
-                console.error("Error copying text: ", err);
-            });
+
+        // Fetch news content dynamically
+        function getNewsContent(newsId) {
+            return $(".news-card[data-id='" + newsId + "'] .news-content").text();
         }
 
-        function processNews(newsId) {
+        // Generate Word Cloud
+        function processNews(newsId, button) {
+            $(button).text("⌛ Generating...").prop("disabled", true);
+            
+            let content = getNewsContent(newsId); // Fetch the content dynamically
+
             $.ajax({
-                url: "process_news.php",
+                url: "http://127.0.0.1:5000/process_news",
                 type: "POST",
-                data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function () {
-                    location.reload();  // Reload the page to show the updated word cloud
+                data: JSON.stringify({ id: newsId, content: content }),
+                success: function (response) {
+                    if (response.wordcloud) {
+                        $("#wordcloud-" + newsId).attr("src", "data:image/png;base64," + response.wordcloud);
+                    }
+                    $(button).text("✔️ Done").prop("disabled", false);
                 },
-                error: function (xhr) {
-                    alert("Error processing news: " + xhr.responseText);
+                error: function () {
+                    alert("❌ Failed to generate Word Cloud");
+                    $(button).text("Generate Word Cloud").prop("disabled", false);
                 }
             });
         }
 
-        function extractKeywords(newsId) {
+        // Extract Keywords
+        function extractKeywords(newsId, button) {
+            $(button).text("⌛ Extracting...").prop("disabled", true);
+
+            let content = getNewsContent(newsId);
+
             $.ajax({
-                url: "extract_keywords.php",
+                url: "http://127.0.0.1:5000/extract_keywords",
                 type: "POST",
-                data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function () {
-                    location.reload();  // Reload to show updated keywords
+                data: JSON.stringify({ id: newsId, content: content }),
+                success: function (response) {
+                    if (response.keywords) {
+                        $("#keywords-" + newsId).text(response.keywords.join(", "));
+                    }
+                    $(button).text("✔️ Done").prop("disabled", false);
                 },
-                error: function (xhr) {
-                    alert("Error extracting keywords: " + xhr.responseText);
+                error: function () {
+                    alert("❌ Failed to extract keywords");
+                    $(button).text("Extract Keywords").prop("disabled", false);
                 }
             });
         }
 
-        function summarizeNews(newsId) {
+        // Summarize News
+        function summarizeNews(newsId, button) {
+            $(button).text("⌛ Summarizing...").prop("disabled", true);
+
+            let content = getNewsContent(newsId);
+
             $.ajax({
-                url: "summarize_news.php",
+                url: "http://127.0.0.1:5000/summarize_news",
                 type: "POST",
-                data: JSON.stringify({ id: newsId }),
                 contentType: "application/json",
-                success: function () {
-                    location.reload();  // Reload to show updated summary
+                data: JSON.stringify({ id: newsId, content: content }),
+                success: function (response) {
+                    if (response.summary) {
+                        $("#summary-" + newsId).text(response.summary);
+                    }
+                    $(button).text("✔️ Done").prop("disabled", false);
                 },
-                error: function (xhr) {
-                    alert("Error summarizing news: " + xhr.responseText);
+                error: function () {
+                    alert("❌ Failed to summarize news");
+                    $(button).text("Summarize News").prop("disabled", false);
                 }
             });
         }
     </script>
+
+
 
     <style>
         body {
@@ -140,12 +199,14 @@ sort($years); // Sort years in ascending order
         .filter-container {
             display: flex;
             justify-content: center;
+            align-items: center;
             gap: 15px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+            text-align: center;
         }
 
-        select,
-        input {
+        select, input {
             padding: 10px;
             font-size: 16px;
             border-radius: 10px;
@@ -183,87 +244,14 @@ sort($years); // Sort years in ascending order
             transform: scale(1.05);
         }
 
-        .news-card p a {
-            display: inline-block;
-            text-decoration: none;
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            background: #00BFFF;
-            padding: 10px 15px;
-            border-radius: 10px;
-            transition: all 0.3s ease-in-out;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .news-card p a:hover {
-            background: rgba(255, 255, 255, 0.8);
-            color: black;
-            transform: scale(1.05);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-
-
-        .news-title {
-            margin: 0px;
-            font-size: 28px;
-            color: #000;
+        .no-results {
             text-align: center;
+            font-size: 20px;
+            color: red;
+            display: none;
         }
 
-        .news-content,
-        .news-tag {
-            font-size: 18px;
-            color: #000;
-            text-align: left;
-        }
-
-        .wordcloud-container {
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-        }
-
-        .wordcloud-container img {
-            width: 100%;
-            max-width: 400px;
-            border-radius: 10px;
-        }
-
-        .summary-container {
-            position: relative;
-            text-align: left;
-            margin-top: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            padding: 10px;
-            border-radius: 10px;
-        }
-
-        .copy-btn {
-            position: absolute;
-            justify-content: center;
-            align-items: center;
-            top: 6px;
-            right: 8px;
-            background: transparent;
-            font-size: 16px;
-            font-weight: bold;
-            border: 2px solid #00BFFF;
-            border-radius: 10px;
-            cursor: pointer;
-            color: #333;
-            font-size: 12px;
-            padding: 6px;
-
-        }
-
-        .copy-btn:hover {
-            color: #007acc;
-            background: #00BFFF;
-            transform: scale(1.05);
-        }
-
-        .news-card .btn {
+        .btn, #scrapeButton {
             display: inline-block;
             padding: 10px 15px;
             font-size: 16px;
@@ -277,151 +265,48 @@ sort($years); // Sort years in ascending order
             transition: background 0.3s, transform 0.2s;
         }
 
-        .news-card button:hover {
+        .btn:hover, #scrapeButton:hover {
             background: #00BFFF;
             color: white;
             transform: scale(1.05);
         }
-
-        .no-results {
-            text-align: center;
-            font-size: 20px;
-            color: red;
-            display: none;
+        .wordcloud-container img {
+            max-width: 100%;  /* Ensure it does not overflow its container */
+            height: auto;      /* Maintain aspect ratio */
+            display: block;    /* Ensure proper alignment */
+            margin: 10px auto; /* Center the image */
         }
 
-        .tag-container {
-            text-align: left;
-            margin-top: 10px;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: left;
-            gap: 8px;
-        }
-
-        /* เพิ่มอิโมจิในข่าว */
-        .news-content:before {
-            content: "📰";
-            /* ใส่อิโมจิ */
-            font-size: 18px;
-            margin-right: 5px;
-        }
-
-        #filterType {
-            padding: 10px 15px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 10px;
-            border: 2px solid #00BFFF;
-            background: #E0FFFF;
-            color: black;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s ease-in-out;
-        }
-
-        #filterType:hover,
-        #filterType:focus {
-            background: #00BFFF;
-            color: white;
-            border-color: #E0FFFF;
-            outline: none;
-        }
-
-        #filterType option {
-            background: white;
-            color: black;
-            font-weight: bold;
-        }
-
-        #filterType option:hover {
-            background: #E0FFFF;
-        }
     </style>
 </head>
 
 <body>
     <h1>📰 ข่าวทั้งหมด</h1>
-
     <div class="filter-container">
-        <label for="filterType">ประเภท:</label>
-        <select id="filterType">
-            <option value="all">ทั้งหมด</option>
-            <?php foreach ($news_types as $type): ?>
-                <option value="<?php echo htmlspecialchars($type); ?>"><?php echo htmlspecialchars($type); ?></option>
-            <?php endforeach; ?>
-        </select>
-
-        <label for="filterPublisher">ผู้เผยแพร่:</label>
+        <label>ผู้เผยแพร่:</label>
         <select id="filterPublisher">
-            <option value="all">ทั้งหมด</option>
-            <?php foreach ($publishers as $publisher): ?>
-                <option value="<?php echo htmlspecialchars($publisher); ?>"><?php echo htmlspecialchars($publisher); ?>
-                </option>
-            <?php endforeach; ?>
+            <option value="thestandard">The Standard</option>
+            <option value="matichon">Matichon</option>
+            <option value="tna">TNA</option>
         </select>
-
-        <label for="filterYear">ปี:</label>
+        <label>ประเภท:</label>
+        <select id="filterType">
+            <option value="entertainment">บันเทิง</option>
+            <option value="politics">การเมือง</option>
+            <option value="sport">กีฬา</option>
+            <option value="foreign">ต่างประเทศ</option>
+        </select>
+        <label>ปี:</label>
         <select id="filterYear">
-            <option value="all">ทั้งหมด</option>
-            <?php foreach ($years as $year): ?>
-                <option value="<?php echo htmlspecialchars($year); ?>"><?php echo htmlspecialchars($year); ?></option>
-            <?php endforeach; ?>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+            <option value="2023">2023</option>
+            <option value="2022">2022</option>
         </select>
-
-        <input type="text" id="searchInput" placeholder="ค้นหาข่าว...">
+        <button id="scrapeButton">ดึงข้อมูล</button>
     </div>
-
     <div class="news-container">
-        <div id="noResults" class="no-results">
-            <h3>❌ ไม่มีข่าวที่ตรงกับการค้นหา</h3>
-            <p>โปรดลองป้อนคำใหม่ที่เกี่ยวข้องกับหัวข้อข่าว เนื้อหา หรือแท็ก</p>
-        </div>
-
-        <?php foreach ($news_list as $news): ?>
-
-
-            <div class="news-card" data-type="<?php echo htmlspecialchars($news['type']); ?>"
-                data-publisher="<?php echo htmlspecialchars($news['publisher'] ?? 'No data'); ?>"
-                data-year="<?php echo !empty($news['date']) ? date("Y", strtotime($news['date'])) : 'No data'; ?>"
-                id="news-<?php echo $news['id']; ?>">
-                <h3 class="news-title"><?php echo $news['title']; ?></h3>
-                <p class="news-content">
-                    ประเภท: <?php echo $news['type']; ?> | ผู้เผยแพร่: <?php echo $news['publisher'] ?? 'No data'; ?> |
-                    วันที่: <?php echo !empty($news['date']) ? $news['date'] : 'No data'; ?></span>
-                </p>
-                <p><a href="<?php echo $news['link']; ?>">อ่านเพิ่มเติม</a></p>
-
-
-                <button class="btn" onclick="processNews(<?php echo $news['id']; ?>)">Generate Word Cloud</button>
-                <button class="btn" onclick="extractKeywords(<?php echo $news['id']; ?>)">Extract Keywords</button>
-                <button class="btn" onclick="summarizeNews(<?php echo $news['id']; ?>)">Summarize News</button>
-
-                <div class="summary-container">
-                    <strong>ไฮไลท์ในข่าว:</strong>
-                    <button class="copy-btn" onclick="copySummary(this)">
-                        <i class="fas fa-copy"></i>
-                    </button>
-                    <p><?php echo !empty($news['summary']) ? htmlspecialchars($news['summary']) : "<span style='color: gray;'>ยังไม่มีการสรุป</span>"; ?>
-                    </p>
-                </div>
-
-                <div class="tag-container">
-                    <strong>คำปรากฎในข่าวเยอะที่สุด: </strong>
-                    <span class="news-tag"><?php echo htmlspecialchars($news['tag'] ?? 'ยังไม่มีการวิเคราะห์'); ?></span>
-                </div>
-
-                <div class="wordcloud-container">
-                    <img id="news-img-<?php echo $news['id']; ?>" src="get_image.php?id=<?php echo $news['id']; ?>"
-                        alt="Word Cloud">
-                </div>
-            </div>
-        <?php endforeach; ?>
+        <div id="noResults" class="no-results"></div>
     </div>
 </body>
-
 </html>

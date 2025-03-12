@@ -1,26 +1,17 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pymysql
-from pythainlp.corpus import thai_stopwords, thai_words
 from wordcloud import WordCloud
 from io import BytesIO
-# import pandas as pd
-from pythainlp.tokenize import word_tokenize, syllable_tokenize, sent_tokenize
 from sklearn.feature_extraction.text import TfidfVectorizer
-from collections import Counter
-import re
 from pythainlp.summarize import summarize
-
-stop_words = set(thai_stopwords())  # Thai stop words
-valid_thai_words = set(thai_words())  # Thai dictionary words
-
-# Manually remove common but non-informative words
-manual_stopwords = set(["มาก", "แล้ว", "วันที่", "ใช่",
-                        "ไม่เลย", "คือ", "อีก", "และ",
-                        "เพราะ", "ด้วย", "ค่ะ", "ครับ",
-                        "หรือ", "อย่าง", "ธันวา", "เรียก", 
-                        "ปี", "วัย", "ล้าน", "3", "000", ""])
+import base64
+from scraping.thestandard import scrape_thestandard
+from scraping.matichon import scrape_matichon
+from scraping.tna import scrape_tna
 
 app = Flask(__name__)
+CORS(app)
 
 
 def connect_db():  # Connect to MySQL
@@ -45,62 +36,33 @@ def process_news():
         return jsonify({"error": "Invalid JSON data"}), 400
 
     news_id = data.get("id")
-    title = data.get("title")
     content = data.get("content")
-
+    print(f"get this content from index:\n {content}")
     if not news_id or not content:
         return jsonify({"error": "Missing 'id' or 'content'"}), 400
 
     font_path = "fonts/Mitr-Regular.ttf"
     reg = r"[ก-๙a-zA-Z']+"
 
-    # Tokenize content
-    content_tokens = word_tokenize(content)
-
-    # Remove stop words
-    filtered_tokens = [
-        word for word in content_tokens if word not in stop_words and word.strip()]
-
-    # Select only 2-syllable words with error handling
-    two_syllable_words = []
-    for word in filtered_tokens:
-        try:
-            if len(word) > 1 and len(syllable_tokenize(word)) == 2:
-                two_syllable_words.append(word)
-        except Exception as e:
-            print(f"Error processing word '{word}': {e}")
-
-    if not two_syllable_words:
-        return jsonify({"error": "No valid words for word cloud"}), 400
-
-    content_text_filtered = " ".join(two_syllable_words)
-
     # Generate Word Cloud
     wordcloud = WordCloud(
-        stopwords=stop_words,
         font_path=font_path,
         background_color="white",
         max_words=2000,
         height=2000,
         width=4000,
         regexp=reg
-    ).generate(content_text_filtered)
+    ).generate(content)
 
-    # Convert to image
+    # Convert image to base64
     img_io = BytesIO()
     wordcloud.to_image().save(img_io, format="PNG")
-    img_blob = img_io.getvalue()
-
-    # Update database with the new image
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE news SET image=%s WHERE id=%s", (img_blob, news_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Processed successfully!", "id": news_id})
+    img_io.seek(0)
+    img_base64 = base64.b64encode(img_io.read()).decode()
+    print(f"send word cloud to index successfully")
+    return jsonify({"wordcloud": img_base64})
 
 
-# Extract Keywords using TF-IDF (Title weighting + 2-syllable filter + dictionary check)
 @app.route('/extract_keywords', methods=['POST'])
 def extract_keywords():
     if request.content_type != 'application/json':
@@ -111,58 +73,24 @@ def extract_keywords():
         return jsonify({"error": "Invalid JSON data"}), 400
 
     news_id = data.get("id")
-    title = data.get("title", "")
     content = data.get("content", "")
-
+    print(f"Get this content from index:\n{content}")
     if not news_id or not content:
         return jsonify({"error": "Missing 'id' or 'content'"}), 400
 
-    # Combine title and content, repeating the title to give it more weight
-    combined_text = (title + " ") * 3 + content
-
-    # Convert text to lowercase
-    combined_text = combined_text.lower()
-
-    # TF-IDF Vectorization with bigram support
+    # TF-IDF Vectorization
     vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),  # Extracts unigrams and bigrams
-        token_pattern=r'[ก-๙0-9]+',
-    )
-    tfidf_matrix = vectorizer.fit_transform([combined_text])
+        ngram_range=(1, 2), token_pattern=r'[ก-๙0-9]+')
+    tfidf_matrix = vectorizer.fit_transform([content])
 
-    # Extract feature names (words/phrases) and their scores
+    # Extract top 5 keywords
     feature_array = vectorizer.get_feature_names_out()
     scores = tfidf_matrix.toarray()[0]
-
-    # Create dictionary of words/phrases and scores
-    word_score_dict = dict(zip(feature_array, scores))
-
-    # Filter only meaningful words: words must be in the Thai dictionary or be bigrams
-    valid_keywords = {}
-    for word, score in word_score_dict.items():
-        try:
-            if word in valid_thai_words or " " in word:
-                if len(syllable_tokenize(word)) <= 4 and word not in manual_stopwords:
-                    valid_keywords[word] = score
-        except Exception as e:
-            print(f"Error processing word '{word}': {e}")
-
-    # Sort words/phrases by score in descending order
-    sorted_keywords = sorted(valid_keywords.items(),
+    sorted_keywords = sorted(zip(feature_array, scores),
                              key=lambda x: x[1], reverse=True)
-
-    # Select top 5 keywords
     top_keywords = [word for word, score in sorted_keywords[:5]]
-    keywords_str = ", ".join(top_keywords)
-
-    # Update database with extracted keywords
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE news SET tag=%s WHERE id=%s",
-                   (keywords_str, news_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message": "Keywords extracted successfully!", "id": news_id, "keywords": top_keywords})
+    print(f"send keyword to index successfully")
+    return jsonify({"keywords": top_keywords})
 
 
 @app.route('/summarize_news', methods=['POST'])
@@ -175,25 +103,85 @@ def summarize_news():
         return jsonify({"error": "Invalid JSON data"}), 400
 
     news_id = data.get("id")
-    title = data.get("title")
     content = data.get("content")
-
+    print(f"Get this content from index:\n{content}")
     if not news_id or not content:
         return jsonify({"error": "Missing 'id' or 'content'"}), 400
 
-    # Summarize the content using TextRank
+    # Summarize content
     summary_sentences = summarize(content, n=3)  # Get 3 key sentences
     summary_text = " ".join(summary_sentences)
+    print(f"send summarize text to index successfully")
+    return jsonify({"summary": summary_text})
 
-    # Update database with summary
+
+@app.route('/fetch_news', methods=['POST'])
+def fetch_news():
+    data = request.get_json()
+    news_type = data.get("type", "all")
+    publisher = data.get("publisher", "all")
+    year = data.get("year", "all")
+
+    scraped_news = []  # Store scraped news
+
+    # Check and call relevant scrapers
+    if publisher in ["thestandard", "all"]:
+        scraped_news += scrape_thestandard(news_type, year)
+
+    if publisher in ["matichon", "all"]:
+        scraped_news += scrape_matichon(news_type, year)
+
+    if publisher in ["tna", "all"]:
+        scraped_news += scrape_tna(news_type, year)
+
+    # Insert scraped news into MySQL
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE news SET summary=%s WHERE id=%s",
-                   (summary_text, news_id))
+
+    inserted_news = []  # Store inserted news to return
+
+    for news in scraped_news:
+        if not isinstance(news, dict):  # Ensure it's a dictionary
+            print(f"Skipping invalid news format: {news}")
+            continue
+
+        title = news.get("title", "Unknown Title")
+        link = news.get("link", "")
+        date = news.get("date", "Unknown Date")
+        content = news.get("content", "No Content")
+        publisher = news.get("publisher", "Unknown Publisher")
+        news_type = news.get("type", "Unknown Type")
+
+        cursor.execute(
+            "SELECT id FROM news WHERE title = %s AND link = %s", (title, link))
+        existing_news = cursor.fetchone()
+
+        if not existing_news:
+            cursor.execute("""
+                INSERT INTO news (title, publisher, type, date, content, link)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (title, publisher, news_type, date, content, link))
+            news_id = cursor.lastrowid
+        else:
+            news_id = existing_news[0]
+
+        # Append inserted news data (including ID) to return to frontend
+        inserted_news.append({
+            "id": news_id,  # Include ID
+            "title": title,
+            "link": link,
+            "date": date,
+            "content": content,
+            "publisher": publisher,
+            "type": news_type
+        })
+
     conn.commit()
+    cursor.close()
     conn.close()
-    return jsonify({"message": "Summary generated successfully!", "id": news_id, "summary": summary_text})
+
+    return jsonify({"news": inserted_news})  # Send back the inserted news
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
